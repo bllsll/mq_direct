@@ -1,63 +1,12 @@
-// package main
-// import (
-// 	"context"
-// 	"log"
-// 	"time"
-// 	amqp "github.com/rabbitmq/amqp091-go"
-// )
-
-// func failOnError(err error, msg string) {
-// 	if err != nil {
-// 		log.Panicf("failOnError %s: %s", msg, err)
-// 	}
-// }
-
-// func main() {
-// 	//连接到mq
-// 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-// 	//conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-// 	failOnError(err, "Failed to connect to RabbitMQ")
-// 	defer conn.Close()
-
-// 	//创建通道
-// 	ch, err := conn.Channel()
-// 	failOnError(err, "Failed to open a channel")
-// 	defer ch.Close()
-
-// 	//声明一个队列，如果队列不存在的话，就会创建
-// 	q, err := ch.QueueDeclare(
-// 		"hello", //name
-// 		false,
-// 		false,
-// 		false,
-// 		false,
-// 		nil,
-// 	)
-// 	failOnError(err, "Failed to declare a queue")
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 	defer cancel()
-
-// 	body := "Hello World"
-// 	err = ch.PublishWithContext(ctx,
-// 		"",
-// 		q.Name,
-// 		false,
-// 		false,
-// 		amqp.Publishing {
-// 			ContentType: "text/plain",
-// 			Body:		 []byte(body),
-// 		})
-// 	failOnError(err, "Failed to pushlish a message")
-// 	log.Printf(" [x] Sent %s\n", body)
-// }
-
 package main
 
 import (
 	"context"
 	"log"
+	"os"
+	"strings"
 	"time"
+	//"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -77,28 +26,67 @@ func main() {
 	failOnError(err, "Failed to open a channel")
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare(
-		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+	err = ch.ExchangeDeclare(
+		"logs_direct", // name
+		"direct",      // type
+		true,          // durable
+		false,         // auto-deleted
+		false,         // internal
+		false,         // no-wait
+		nil,           // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
+	failOnError(err, "Failed to declare an exchange")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	body := "Hello World!"
+	body := bodyFrom(os.Args)
+
 	err = ch.PublishWithContext(ctx,
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
+		"logs_direct",         // exchange
+		severityFrom(os.Args), // routing key
+		false,                 // mandatory
+		false,                 // immediate
 		amqp.Publishing{
 			ContentType: "text/plain",
 			Body:        []byte(body),
 		})
-	failOnError(err, "Failed to publish a message")
-	log.Printf(" [x] Sent %s\n", body)
+		log.Printf(" [x] Sent %s 路由key = %s", body, severityFrom(os.Args))
+
+		// for i := 1; i <= 20; i++ {
+		// 	body := strconv.Itoa(i)
+		// 	body = body + "_new路由key=" + strconv.Itoa(i%6 + 1)
+		// 	err = ch.PublishWithContext(ctx,
+		// 	"logs_direct",         // exchange
+		// 	strconv.Itoa(i%6 + 1), // routing key
+		// 	false,                 // mandatory
+		// 	false,                 // immediate
+		// 	amqp.Publishing{
+		// 		ContentType: "text/plain",
+		// 		Body:        []byte(body),
+		// 	})
+		// 	failOnError(err, "Failed to publish a message")
+		// 	log.Printf(" [x] Sent %s 路由key = %s", body, strconv.Itoa(i%6 + 1))
+		// }
+
+}
+
+func bodyFrom(args []string) string {
+	var s string
+	if (len(args) < 3) || os.Args[2] == "" {
+		s = "hello"
+	} else {
+		s = strings.Join(args[2:], " ")
+	}
+	return s
+}
+
+func severityFrom(args []string) string {
+	var s string
+	if (len(args) < 2) || os.Args[1] == "" {
+		s = "info"
+	} else {
+		s = os.Args[1]
+	}
+	return s
 }
